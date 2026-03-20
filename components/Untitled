@@ -1,0 +1,24 @@
+const fetchComments = async () => {
+    if (!post?.id) return
+    
+    setIsLoadingComments(true)
+    try {
+      const res = await fetch(`/api/posts/${post.id}/comments`)
+      if (res.ok) {
+        const data = await res.json()
+        setComments(Array.isArray(data) ? data : [])
+        console.log('📥 Comments loaded:', data?.length || 0)
+      }
+    } catch (error) {
+      console.error('Error loading comments:', error)
+    } finally {
+      setIsLoadingComments(false)
+    }
+  }
+
+  const handleCommentButtonClick = () => {
+    if (!showCommentInput && commentCount > 0) {
+      fetchComments()
+    }
+    setShowCommentInput(!showCommentInput)
+  }

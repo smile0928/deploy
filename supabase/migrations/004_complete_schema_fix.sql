@@ -1,0 +1,80 @@
+-- COMPLETE SCHEMA FIX
+-- This migration creates/updates all necessary tables and columns for Senpai Social
+
+-- 1. USERS TABLE (if not exists)
+-- Link to auth.users via id
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  username TEXT UNIQUE NOT NULL,
+  avatar_url TEXT,
+  bio TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. FOLLOWERS TABLE
+DROP TABLE IF EXISTS followers;
+CREATE TABLE followers (
+  id BIGSERIAL PRIMARY KEY,
+  follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(follower_id, following_id),
+  CHECK (follower_id != following_id)
+);
+
+-- 3. ADD MISSING COLUMNS TO MESSAGES TABLE
+-- First, add columns if they don't exist
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS recipient_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS room_id BIGINT;
+
+-- 4. ADD MISSING COLUMNS TO ROOMS TABLE
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS topic TEXT;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT TRUE;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS member_count INTEGER DEFAULT 0;
+
+-- 5. NOTIFICATIONS TABLE - ensure it has the right structure
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- 6. GRANT PERMISSIONS TO PUBLIC/AUTHENTICATED USERS
+GRANT SELECT, INSERT, UPDATE, DELETE ON users TO public;
+GRANT SELECT, INSERT, UPDATE, DELETE ON followers TO public;
+GRANT SELECT, INSERT, UPDATE, DELETE ON messages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON rooms TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON room_members TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON notifications TO authenticated;
+
+-- Grant usage on sequences
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO public;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- 7. CREATE INDEXES FOR PERFORMANCE
+CREATE INDEX IF NOT EXISTS idx_followers_follower_id ON followers(follower_id);
+CREATE INDEX IF NOT EXISTS idx_followers_following_id ON followers(following_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_id ON messages(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+
+-- 8. DISABLE RLS (or set permissive policies)
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE followers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE rooms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE room_members DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
